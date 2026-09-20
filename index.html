@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Para ela — Lista de desejos</title>
+  <meta name="description" content="Tudo o que ela quer e precisa, num só lugar. A nossa lista de desejos e prioridades." />
+  <link rel="icon" href="/favicon.ico" type="image/x-icon" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Lora:ital,wght@0,400..700;1,400..700&display=swap" rel="stylesheet" />
+
+  <!-- Estilos -->
+  <link rel="stylesheet" href="/css/reset.css" />
+  <link rel="stylesheet" href="/css/variables.css" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <div class="page-wrapper">
+    <!-- Cabeçalho -->
+    <header class="site-header">
+      <div class="container header-content">
+        <a href="index.html" class="brand-link">
+          <span class="brand-icon">
+            <i data-lucide="heart" style="width: 20px; height: 20px;"></i>
+          </span>
+          <span class="brand brand-text">para ela<span class="brand-dot">.</span></span>
+        </a>
+
+        <div class="header-actions">
+          <span id="user-display" style="display: none; font-size: 0.8125rem; color: var(--muted-foreground); padding: 0.25rem 0.65rem; background: var(--secondary); border-radius: var(--radius-full);"></span>
+          
+          <button id="google-header-btn" class="btn btn-outline" style="gap: 0.5rem;">
+            <svg viewBox="0 0 48 48" aria-hidden="true" style="width: 16px; height: 16px;">
+              <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9 3.6l6.7-6.7C35.6 2.6 30.2.5 24 .5 14.6.5 6.5 5.9 2.6 13.7l7.8 6.1C12.3 13.7 17.6 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.6-4.9 7.3l7.6 5.9c4.4-4.1 7.1-10.2 7.1-17.7z"/>
+              <path fill="#FBBC05" d="M10.4 28.2a14.5 14.5 0 0 1 0-8.4l-7.8-6.1a24 24 0 0 0 0 20.6l7.8-6.1z"/>
+              <path fill="#34A853" d="M24 47.5c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.2-8.3 2.2-6.4 0-11.7-4.2-13.6-10.3l-7.8 6.1C6.5 42.1 14.6 47.5 24 47.5z"/>
+            </svg>
+            Entrar com Google
+          </button>
+
+          <button id="admin-panel-btn" class="btn btn-outline" style="display: none;">
+            <i data-lucide="users" style="width: 14px; height: 14px;"></i> Admin
+          </button>
+
+          <button id="info-btn" class="btn btn-outline">
+            <i data-lucide="heart" style="width: 14px; height: 14px;"></i> Nós dois
+          </button>
+          
+          <button id="sair-btn" class="btn btn-primary" style="display: none;">
+            Sair
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Modais de Status da Conta (Ocultos por padrão) -->
+    <div id="pending-overlay" class="container" style="display: none; text-align: center; margin-top: 4rem; max-width: 400px; padding: 2rem; background: #fff; border-radius: 12px; border: 1px solid var(--border);">
+      <i data-lucide="clock" style="width: 48px; height: 48px; color: var(--muted-foreground); margin: 0 auto 16px;"></i>
+      <h2 class="font-serif" style="font-size: 1.5rem; margin-bottom: 0.5rem;">Aguardando Aprovação</h2>
+      <p style="color: var(--muted-foreground); font-size: 0.875rem; line-height: 1.5;">Sua conta foi criada e está aguardando a aprovação do administrador para acessar o painel.</p>
+    </div>
+
+    <div id="rejected-overlay" class="container" style="display: none; text-align: center; margin-top: 4rem; max-width: 400px; padding: 2rem; background: #fff; border-radius: 12px; border: 1px solid var(--border);">
+      <i data-lucide="x-circle" style="width: 48px; height: 48px; color: #ef4444; margin: 0 auto 16px;"></i>
+      <h2 class="font-serif" style="font-size: 1.5rem; margin-bottom: 0.5rem;">Acesso Negado</h2>
+      <p style="color: var(--muted-foreground); font-size: 0.875rem; line-height: 1.5;">Sua conta não foi aprovada para acessar este sistema.</p>
+    </div>
+
+    <!-- Admin Modal -->
+    <div id="admin-dialog" class="dialog-overlay" style="display: none;">
+      <div class="dialog-card" style="max-width: 500px; width: 100%;">
+        <div class="dialog-header">
+          <h3 class="dialog-title font-serif">Painel de Aprovação</h3>
+          <p class="dialog-desc">Aprove ou negue o acesso de novos usuários</p>
+        </div>
+        <div id="admin-users-list" style="margin: 1rem 0; display: flex; flex-direction: column; gap: 0.75rem;">
+          <!-- Usuários renderizados via JS -->
+          <p style="text-align: center; font-size: 0.875rem; color: var(--muted-foreground);">Carregando usuários...</p>
+        </div>
+        <div class="dialog-actions">
+          <button id="close-admin-btn" class="btn btn-outline">Fechar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conteúdo Principal -->
+    <main id="main-content" class="container">
+      <!-- Breadcrumb -->
+      <div class="breadcrumb-bar">
+        <i data-lucide="house" style="width: 13px; height: 13px;"></i>
+        <span>Nosso espaço</span>
+        <span>/</span>
+        <span style="color: var(--foreground); font-weight: 500;">Lista de desejos dela</span>
+        <span class="badge-tag">Salvo no navegador</span>
+      </div>
+
+
+      <!-- Métricas / Estatísticas -->
+      <section class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-label">
+            <i data-lucide="shopping-bag" style="width: 15px; height: 15px;"></i> A realizar
+          </span>
+          <div id="stat-total" class="stat-value">R$ 0,00</div>
+          <div id="stat-pending-count" class="stat-sub">0 desejos pendentes</div>
+        </div>
+
+        <div class="stat-box">
+          <span class="stat-label">
+            <i data-lucide="clock-3" style="width: 15px; height: 15px;"></i> Não tenho
+          </span>
+          <div id="stat-missing-count" class="stat-value">0 <span style="font-size: 0.75rem; font-weight: normal; color: var(--muted-foreground);">itens</span></div>
+          <div class="stat-sub">O que ela mais quer agora</div>
+        </div>
+
+        <div class="stat-box">
+          <span class="stat-label">
+            <i data-lucide="check" style="width: 15px; height: 15px;"></i> Já realizados
+          </span>
+          <div id="stat-bought-count" class="stat-value">0 <span style="font-size: 0.75rem; font-weight: normal; color: var(--muted-foreground);">itens</span></div>
+          <div class="stat-sub">Mais um mimo realizado</div>
+        </div>
+      </section>
+
+      <!-- Título da Lista e Botão Adicionar -->
+      <div class="list-header">
+        <div>
+          <h2 class="font-serif list-title">Listinha dela</h2>
+          <p class="list-subtitle">Cada desejo é um cuidado a mais.</p>
+        </div>
+        <button id="add-item-btn" class="btn btn-primary" style="height: 2.75rem;">
+          <i data-lucide="plus" style="width: 16px; height: 16px;"></i> Adicionar item
+        </button>
+      </div>
+
+      <!-- Abas -->
+      <div class="tabs-bar">
+        <button id="tab-falta" class="tab-btn active">
+          <i data-lucide="shopping-bag" style="width: 16px; height: 16px;"></i> Quero
+          <span id="count-falta" class="tab-count">0</span>
+        </button>
+        <button id="tab-acabando" class="tab-btn">
+          <i data-lucide="clock-3" style="width: 16px; height: 16px;"></i> Tô precisando
+          <span id="count-acabando" class="tab-count">0</span>
+        </button>
+        <button id="tab-comprados" class="tab-btn">
+          <i data-lucide="check" style="width: 16px; height: 16px;"></i> Realizado
+          <span id="count-comprados" class="tab-count">0</span>
+        </button>
+      </div>
+
+      <!-- Barra de Filtro e Busca -->
+      <div class="filters-bar">
+        <div class="search-field">
+          <i data-lucide="search" style="width: 16px; height: 16px; color: var(--muted-foreground);"></i>
+          <input id="search-input" type="text" class="search-input" placeholder="Buscar na lista dela..." />
+        </div>
+
+        <div class="select-field">
+          <i data-lucide="sliders-horizontal" style="width: 15px; height: 15px; color: var(--muted-foreground);"></i>
+          <select id="priority-select" class="select-input">
+            <option value="Todas">Todas as prioridades</option>
+            <option value="Não tenho">Não tenho</option>
+            <option value="Acabando">Acabando</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Grade de Cards -->
+      <div id="cards-container" class="cards-grid"></div>
+
+      <!-- Estado Vazio (Empty State) -->
+      <div id="empty-state" class="empty-state" style="display: none;">
+        <div class="empty-icon-wrap">
+          <i data-lucide="shopping-bag" style="width: 24px; height: 24px;"></i>
+        </div>
+        <h3 id="empty-title" class="font-serif empty-title">Toda listinha começa com um desejo</h3>
+        <p id="empty-desc" class="empty-desc">Adicione o primeiro item para começar a cuidar do que ela precisa.</p>
+        <button id="empty-action-btn" class="btn btn-secondary" style="margin-top: 1rem;">
+          Adicionar primeiro item <i data-lucide="arrow-right" style="width: 16px; height: 16px;"></i>
+        </button>
+      </div>
+
+      <!-- Rodapé com Totalizadores -->
+      <div class="list-footer-stats">
+        <span id="list-count-footer">0 itens nesta lista</span>
+        <span id="list-total-footer">Total <strong>R$ 0,00</strong></span>
+      </div>
+    </main>
+
+    <!-- Modal Adicionar / Editar Item -->
+    <div id="item-dialog" class="dialog-overlay">
+      <div class="dialog-card">
+        <div class="dialog-header">
+          <h3 id="dialog-title" class="dialog-title">Um novo desejo dela</h3>
+          <p class="dialog-desc">Preencha os detalhes do produto</p>
+        </div>
+
+        <form id="item-form">
+          <!-- Upload de Imagem -->
+          <label class="photo-uploader">
+            <div id="photo-preview-container" style="display: none;">
+              <img id="photo-preview-img" src="" alt="Foto selecionada" class="photo-preview" />
+            </div>
+            <i data-lucide="image-plus" style="width: 26px; height: 26px; color: var(--muted-foreground);"></i>
+            <span id="photo-upload-text" style="font-size: 0.875rem; font-weight: 500;">Adicionar foto do produto</span>
+            <span class="photo-hint">JPG, PNG ou WebP · até 5 MB</span>
+            <input id="photo-input" type="file" accept="image/jpeg,image/png,image/webp" style="display: none;" />
+          </label>
+          <button id="remove-photo-btn" type="button" class="btn btn-ghost" style="display: none; width: 100%; margin-bottom: 0.75rem; font-size: 0.8125rem;">
+            <i data-lucide="x" style="width: 14px; height: 14px;"></i> Remover foto
+          </button>
+
+          <!-- Campos -->
+          <div class="form-group">
+            <label for="item-name">Nome do produto *</label>
+            <input id="item-name" class="form-input" type="text" required maxlength="120" placeholder="Ex.: Perfume favorito" />
+          </div>
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label for="item-price">Valor estimado (R$) *</label>
+              <input id="item-price" class="form-input" type="number" required min="0" step="0.01" placeholder="0,00" />
+            </div>
+            <div class="form-group">
+              <label for="item-priority">Prioridade</label>
+              <select id="item-priority" class="form-select">
+                <option value="Não tenho">Não tenho</option>
+                <option value="Acabando">Acabando</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="item-status">Situação</label>
+            <select id="item-status" class="form-select">
+              <option value="falta">Quero</option>
+              <option value="acabando">Tô precisando</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="item-url">Link do produto <span style="font-weight: normal; color: var(--muted-foreground);">(opcional)</span></label>
+            <input id="item-url" class="form-input" type="url" placeholder="https://..." />
+          </div>
+
+          <div id="form-error" class="form-error"></div>
+
+          <div class="dialog-actions">
+            <button id="cancel-dialog-btn" type="button" class="btn btn-outline">Cancelar</button>
+            <button type="submit" class="btn btn-primary">
+              <i data-lucide="check" style="width: 16px; height: 16px;"></i> Salvar item
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Modal Informativo: Nós dois -->
+    <div id="info-dialog" class="dialog-overlay">
+      <div class="dialog-card">
+        <div class="dialog-header">
+          <h3 class="dialog-title font-serif">Nosso cantinho especial</h3>
+          <p class="dialog-desc">Lista compartilhada com muito carinho</p>
+        </div>
+        <p style="font-size: 0.875rem; line-height: 1.6; color: var(--muted-foreground);">
+          Este espaço foi preparado para organizar os desejos, mimos e necessidades em um só lugar. Os itens cadastrados ficam salvos no seu próprio navegador de forma rápida e segura!
+        </p>
+        <div class="dialog-actions">
+          <button id="close-info-btn" class="btn btn-primary">Entendido</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script TypeScript Principal via Vite -->
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
+

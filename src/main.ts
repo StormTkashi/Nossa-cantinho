@@ -1,34 +1,19 @@
 import { Item } from './types';
-import { getStoredItems, saveStoredItems } from './storage';
 import { checkAuth, logout, getCurrentUser, onAuthStateChange, loginWithGoogle } from './auth';
+import { supabase } from './supabase';
 import {
-  createIcons,
-  Heart,
-  Plus,
-  ShoppingBag,
-  Clock3,
-  Check,
-  ArrowUpRight,
-  Search,
-  SlidersHorizontal,
-  ImagePlus,
-  Pencil,
-  Trash2,
-  RotateCcw,
-  X,
-  House,
-  ArrowRight
+  createIcons, Heart, Plus, ShoppingBag, Clock3, Check, ArrowUpRight, Search, SlidersHorizontal, ImagePlus, Pencil, Trash2, RotateCcw, X, House, ArrowRight
 } from 'lucide';
 
-// Verifica autenticação usando a configuração global REQUIRE_AUTH
 checkAuth();
 
 // Estado da Aplicação
-let items: Item[] = getStoredItems();
+let items: Item[] = [];
 let currentTab: 'falta' | 'acabando' | 'comprados' = 'falta';
 let searchQuery = '';
 let selectedPriority = 'Todas';
 let editingItem: Item | null = null;
+let currentPhotoFile: File | null = null;
 let currentPhotoData = '';
 
 // Elementos DOM
@@ -81,38 +66,25 @@ const itemPrioritySelect = document.getElementById('item-priority') as HTMLSelec
 const itemStatusSelect = document.getElementById('item-status') as HTMLSelectElement;
 const itemUrlInput = document.getElementById('item-url') as HTMLInputElement;
 
-// Formatador de Moeda
-const formatCurrency = (val: number): string => {
-  return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-};
+const mainContent = document.getElementById('main-content') as HTMLElement;
+const pendingOverlay = document.getElementById('pending-overlay') as HTMLElement;
+const rejectedOverlay = document.getElementById('rejected-overlay') as HTMLElement;
+const adminPanelBtn = document.getElementById('admin-panel-btn') as HTMLButtonElement;
+const adminDialog = document.getElementById('admin-dialog') as HTMLDivElement;
+const closeAdminBtn = document.getElementById('close-admin-btn') as HTMLButtonElement;
+const adminUsersList = document.getElementById('admin-users-list') as HTMLDivElement;
 
-// Renderização dos ícones Lucide
+const formatCurrency = (val: number): string => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
 function refreshIcons(): void {
   createIcons({
-    icons: {
-      Heart,
-      Plus,
-      ShoppingBag,
-      Clock3,
-      Check,
-      ArrowUpRight,
-      Search,
-      SlidersHorizontal,
-      ImagePlus,
-      Pencil,
-      Trash2,
-      RotateCcw,
-      X,
-      House,
-      ArrowRight
-    }
+    icons: { Heart, Plus, ShoppingBag, Clock3, Check, ArrowUpRight, Search, SlidersHorizontal, ImagePlus, Pencil, Trash2, RotateCcw, X, House, ArrowRight }
   });
 }
 
-// Atualiza Estatísticas no Topo
 function updateStats(): void {
   const pending = items.filter(i => !i.bought);
-  const totalPendingVal = pending.reduce((acc, curr) => acc + (curr.price || 0), 0);
+  const totalPendingVal = pending.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
   const missingCount = pending.filter(i => i.priority === 'Não tenho').length;
   const boughtCount = items.filter(i => i.bought).length;
 
@@ -121,16 +93,13 @@ function updateStats(): void {
   if (statMissingCountEl) statMissingCountEl.textContent = `${missingCount}`;
   if (statBoughtCountEl) statBoughtCountEl.textContent = `${boughtCount}`;
 
-  // Contadores nas abas
   if (countFaltaEl) countFaltaEl.textContent = String(items.filter(i => !i.bought && i.status === 'falta').length);
   if (countAcabandoEl) countAcabandoEl.textContent = String(items.filter(i => !i.bought && i.status === 'acabando').length);
   if (countCompradosEl) countCompradosEl.textContent = String(boughtCount);
 }
 
-// Renderiza a Lista de Cards
 function renderCards(): void {
   updateStats();
-
   const filtered = items.filter(i => {
     const tabMatch = currentTab === 'comprados' ? i.bought : (!i.bought && i.status === currentTab);
     const searchMatch = i.name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -143,7 +112,6 @@ function renderCards(): void {
   if (filtered.length === 0) {
     cardsContainer.style.display = 'none';
     emptyState.style.display = 'flex';
-
     if (searchQuery || selectedPriority !== 'Todas') {
       emptyTitleEl.textContent = 'Nenhum item por aqui';
       emptyDescEl.textContent = 'Tente ajustar sua busca ou selecionar outra prioridade.';
@@ -160,62 +128,48 @@ function renderCards(): void {
   } else {
     cardsContainer.style.display = 'grid';
     emptyState.style.display = 'none';
-
     filtered.forEach(item => {
       const card = document.createElement('article');
       card.className = 'item-card';
-
       const mediaHtml = item.image
         ? `<img src="${item.image}" alt="${item.name}" class="card-img" />`
         : `<i data-lucide="shopping-bag" class="card-media-placeholder" style="width: 44px; height: 44px;"></i>`;
-
       const linkHtml = item.url
-        ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer" class="card-url-link">
-             Ver produto <i data-lucide="arrow-up-right" style="width: 14px; height: 14px;"></i>
-           </a>`
+        ? `<a href="${item.url}" target="_blank" rel="noopener noreferrer" class="card-url-link">Ver produto <i data-lucide="arrow-up-right" style="width: 14px; height: 14px;"></i></a>`
         : '';
-
       const toggleBtnClass = item.bought ? 'btn-outline' : 'btn-secondary';
       const toggleBtnIcon = item.bought ? 'rotate-ccw' : 'check';
       const toggleBtnText = item.bought ? 'Voltar para a lista' : 'Marcar como realizado';
 
       card.innerHTML = `
-        <div class="card-media">
-          ${mediaHtml}
-          <span class="card-badge">${item.priority}</span>
-        </div>
+        <div class="card-media">${mediaHtml}<span class="card-badge">${item.priority}</span></div>
         <div class="card-body">
           <div class="card-header-row">
             <h3 class="card-title">${item.name}</h3>
             <div class="card-actions">
-              <button class="btn-icon edit-btn" data-id="${item.id}" title="Editar ${item.name}">
-                <i data-lucide="pencil" style="width: 16px; height: 16px;"></i>
-              </button>
-              <button class="btn-icon btn-danger delete-btn" data-id="${item.id}" title="Excluir ${item.name}">
-                <i data-lucide="trash-2" style="width: 16px; height: 16px;"></i>
-              </button>
+              <button class="btn-icon edit-btn" data-id="${item.id}" title="Editar"><i data-lucide="pencil" style="width: 16px; height: 16px;"></i></button>
+              <button class="btn-icon btn-danger delete-btn" data-id="${item.id}" title="Excluir"><i data-lucide="trash-2" style="width: 16px; height: 16px;"></i></button>
             </div>
           </div>
-          <div class="card-price">${formatCurrency(item.price)}</div>
+          <div class="card-price">${formatCurrency(Number(item.price))}</div>
           ${linkHtml}
           <button class="btn ${toggleBtnClass} card-toggle-btn toggle-bought-btn" data-id="${item.id}">
             <i data-lucide="${toggleBtnIcon}" style="width: 16px; height: 16px;"></i> ${toggleBtnText}
           </button>
         </div>
       `;
-
       cardsContainer.appendChild(card);
     });
 
-    // Eventos dos botões do card
     cardsContainer.querySelectorAll('.toggle-bought-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         const id = (e.currentTarget as HTMLElement).dataset.id;
         const target = items.find(i => i.id === id);
         if (target) {
-          target.bought = !target.bought;
-          saveStoredItems(items);
+          const newBought = !target.bought;
+          target.bought = newBought; // Optimistic
           renderCards();
+          await supabase.from('items').update({ bought: newBought }).eq('id', id);
         }
       });
     });
@@ -229,42 +183,37 @@ function renderCards(): void {
     });
 
     cardsContainer.querySelectorAll('.delete-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         const id = (e.currentTarget as HTMLElement).dataset.id;
         const target = items.find(i => i.id === id);
         if (target && window.confirm(`Deseja realmente excluir "${target.name}"?`)) {
-          items = items.filter(i => i.id !== id);
-          saveStoredItems(items);
+          items = items.filter(i => i.id !== id); // Optimistic
           renderCards();
+          await supabase.from('items').delete().eq('id', id);
         }
       });
     });
   }
 
-  // Rodapé da Lista
-  const totalVal = filtered.reduce((acc, curr) => acc + (curr.price || 0), 0);
+  const totalVal = filtered.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
   listCountFooter.textContent = `${filtered.length} ${filtered.length === 1 ? 'item' : 'itens'} nesta lista`;
   listTotalFooter.innerHTML = `Total <strong>${formatCurrency(totalVal)}</strong>`;
-
   refreshIcons();
 }
 
-// Controle de Abas
 function setTab(tab: 'falta' | 'acabando' | 'comprados'): void {
   currentTab = tab;
   [tabFaltaBtn, tabAcabandoBtn, tabCompradosBtn].forEach(btn => btn.classList.remove('active'));
-  
   if (tab === 'falta') tabFaltaBtn.classList.add('active');
   if (tab === 'acabando') tabAcabandoBtn.classList.add('active');
   if (tab === 'comprados') tabCompradosBtn.classList.add('active');
-
   renderCards();
 }
 
-// Modal Adicionar / Editar Item
 function openItemDialog(item: Item | null = null): void {
   editingItem = item;
   formErrorEl.textContent = '';
+  currentPhotoFile = null;
   
   if (item) {
     dialogTitle.textContent = 'Editar item';
@@ -281,7 +230,6 @@ function openItemDialog(item: Item | null = null): void {
     itemStatusSelect.value = currentTab === 'acabando' ? 'acabando' : 'falta';
     currentPhotoData = '';
   }
-
   updatePhotoPreview();
   itemDialog.classList.add('open');
 }
@@ -290,6 +238,8 @@ function closeItemDialog(): void {
   itemDialog.classList.remove('open');
   editingItem = null;
   currentPhotoData = '';
+  currentPhotoFile = null;
+  if (photoInput) photoInput.value = '';
 }
 
 function updatePhotoPreview(): void {
@@ -305,38 +255,26 @@ function updatePhotoPreview(): void {
   }
 }
 
-// Eventos de Foto
 photoInput.addEventListener('change', () => {
   const file = photoInput.files?.[0];
   if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { formErrorEl.textContent = 'A imagem deve ter até 5 MB.'; return; }
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) { formErrorEl.textContent = 'Formato inválido. Use JPG, PNG ou WebP.'; return; }
 
-  if (file.size > 5 * 1024 * 1024) {
-    formErrorEl.textContent = 'A imagem deve ter até 5 MB.';
-    return;
-  }
-
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    formErrorEl.textContent = 'Formato inválido. Use JPG, PNG ou WebP.';
-    return;
-  }
-
-  const reader = new FileReader();
-  reader.onload = () => {
-    currentPhotoData = String(reader.result);
-    formErrorEl.textContent = '';
-    updatePhotoPreview();
-  };
-  reader.readAsDataURL(file);
+  currentPhotoFile = file;
+  currentPhotoData = URL.createObjectURL(file);
+  formErrorEl.textContent = '';
+  updatePhotoPreview();
 });
 
 removePhotoBtn.addEventListener('click', () => {
   currentPhotoData = '';
+  currentPhotoFile = null;
   photoInput.value = '';
   updatePhotoPreview();
 });
 
-// Envio do Formulário do Item
-itemForm.addEventListener('submit', (e) => {
+itemForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   formErrorEl.textContent = '';
 
@@ -346,103 +284,119 @@ itemForm.addEventListener('submit', (e) => {
   const status = itemStatusSelect.value as 'falta' | 'acabando';
   const url = itemUrlInput.value.trim();
 
-  if (!name) {
-    formErrorEl.textContent = 'Informe o nome do item.';
-    return;
-  }
-
-  if (isNaN(price) || price < 0) {
-    formErrorEl.textContent = 'Informe um valor válido.';
-    return;
-  }
-
+  if (!name) { formErrorEl.textContent = 'Informe o nome do item.'; return; }
+  if (isNaN(price) || price < 0) { formErrorEl.textContent = 'Informe um valor válido.'; return; }
   if (url) {
     try {
       const parsed = new URL(url);
-      if (!['http:', 'https:'].includes(parsed.protocol)) {
-        throw new Error();
+      if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error();
+    } catch { formErrorEl.textContent = 'Insira um link válido começando com http:// ou https://'; return; }
+  }
+
+  const submitBtn = itemForm.querySelector('button[type="submit"]') as HTMLButtonElement;
+  const originalText = submitBtn.innerHTML;
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Salvando...';
+
+  try {
+    let finalImageUrl = editingItem?.image || '';
+
+    if (currentPhotoFile) {
+      const fileExt = currentPhotoFile.name.split('.').pop();
+      const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+      const { data: uploadData, error: uploadError } = await supabase.storage.from('item-photos').upload(fileName, currentPhotoFile);
+      if (!uploadError && uploadData) {
+        const { data: publicUrlData } = supabase.storage.from('item-photos').getPublicUrl(uploadData.path);
+        finalImageUrl = publicUrlData.publicUrl;
       }
-    } catch {
-      formErrorEl.textContent = 'Insira um link válido começando com http:// ou https://';
-      return;
+    } else if (currentPhotoData === '') {
+      finalImageUrl = '';
     }
+
+    const payload = { name, price, priority, status, url, image: finalImageUrl };
+
+    if (editingItem) {
+      const { data } = await supabase.from('items').update(payload).eq('id', editingItem.id).select().single();
+      if (data) {
+        items = items.map(i => i.id === data.id ? data : i);
+        setTab(data.bought ? 'comprados' : data.status);
+      }
+    } else {
+      const { data } = await supabase.from('items').insert([payload]).select().single();
+      if (data) {
+        items.unshift(data);
+        setTab(data.status);
+      }
+    }
+    closeItemDialog();
+  } catch (err) {
+    formErrorEl.textContent = 'Erro ao salvar item no banco de dados.';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.innerHTML = originalText;
   }
-
-  if (editingItem) {
-    editingItem.name = name;
-    editingItem.price = price;
-    editingItem.priority = priority;
-    editingItem.status = status;
-    editingItem.url = url;
-    editingItem.image = currentPhotoData;
-    items = items.map(i => i.id === editingItem!.id ? editingItem! : i);
-    setTab(editingItem.bought ? 'comprados' : editingItem.status);
-  } else {
-    const newItem: Item = {
-      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-      name,
-      price,
-      priority,
-      status,
-      url,
-      image: currentPhotoData,
-      bought: false
-    };
-    items.push(newItem);
-    setTab(newItem.status);
-  }
-
-  saveStoredItems(items);
-  closeItemDialog();
 });
 
-// Eventos de Busca e Filtros
-searchInput.addEventListener('input', () => {
-  searchQuery = searchInput.value;
-  renderCards();
-});
-
-prioritySelect.addEventListener('change', () => {
-  selectedPriority = prioritySelect.value;
-  renderCards();
-});
-
-// Eventos de Abas
+searchInput.addEventListener('input', () => { searchQuery = searchInput.value; renderCards(); });
+prioritySelect.addEventListener('change', () => { selectedPriority = prioritySelect.value; renderCards(); });
 tabFaltaBtn.addEventListener('click', () => setTab('falta'));
 tabAcabandoBtn.addEventListener('click', () => setTab('acabando'));
 tabCompradosBtn.addEventListener('click', () => setTab('comprados'));
 
-// Eventos de Modais
 addItemBtn.addEventListener('click', () => openItemDialog());
 emptyActionBtn.addEventListener('click', () => openItemDialog());
 cancelDialogBtn.addEventListener('click', closeItemDialog);
+itemDialog.addEventListener('click', (e) => { if (e.target === itemDialog) closeItemDialog(); });
 
-itemDialog.addEventListener('click', (e) => {
-  if (e.target === itemDialog) closeItemDialog();
-});
+infoBtn.addEventListener('click', () => infoDialog.classList.add('open'));
+closeInfoBtn.addEventListener('click', () => infoDialog.classList.remove('open'));
+infoDialog.addEventListener('click', (e) => { if (e.target === infoDialog) infoDialog.classList.remove('open'); });
 
-// Modal "Nós dois"
-infoBtn.addEventListener('click', () => {
-  infoDialog.classList.add('open');
-});
+async function loadAdminUsers() {
+  if (!adminUsersList) return;
+  adminUsersList.innerHTML = '<p style="text-align: center; color: var(--muted-foreground);">Carregando usuários...</p>';
+  const { data: users, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+  if (error || !users || users.length === 0) {
+    adminUsersList.innerHTML = '<p style="text-align: center; color: var(--muted-foreground);">Nenhum usuário encontrado.</p>';
+    return;
+  }
+  adminUsersList.innerHTML = '';
+  users.forEach((u: any) => {
+    const userDiv = document.createElement('div');
+    userDiv.style.display = 'flex'; userDiv.style.justifyContent = 'space-between'; userDiv.style.alignItems = 'center';
+    userDiv.style.padding = '10px'; userDiv.style.border = '1px solid var(--border)'; userDiv.style.borderRadius = '8px';
+    const info = document.createElement('div');
+    info.innerHTML = `<strong>${u.email}</strong> <br/> <span style="font-size: 0.75rem; color: var(--muted-foreground);">Status: ${u.status} | Papel: ${u.role}</span>`;
+    const actions = document.createElement('div');
+    actions.style.display = 'flex'; actions.style.gap = '8px';
+    if (u.status !== 'approved') {
+      const approveBtn = document.createElement('button'); approveBtn.textContent = 'Aprovar'; approveBtn.className = 'btn btn-primary'; approveBtn.style.padding = '4px 12px'; approveBtn.style.fontSize = '0.75rem';
+      approveBtn.onclick = () => updateUserStatus(u.id, 'approved'); actions.appendChild(approveBtn);
+    }
+    if (u.status !== 'rejected' && u.role !== 'admin') {
+      const rejectBtn = document.createElement('button'); rejectBtn.textContent = 'Negar'; rejectBtn.className = 'btn btn-danger'; rejectBtn.style.padding = '4px 12px'; rejectBtn.style.fontSize = '0.75rem';
+      rejectBtn.onclick = () => updateUserStatus(u.id, 'rejected'); actions.appendChild(rejectBtn);
+    }
+    userDiv.appendChild(info); userDiv.appendChild(actions); adminUsersList.appendChild(userDiv);
+  });
+}
 
-closeInfoBtn.addEventListener('click', () => {
-  infoDialog.classList.remove('open');
-});
+async function updateUserStatus(userId: string, newStatus: string) {
+  const { error } = await supabase.from('profiles').update({ status: newStatus }).eq('id', userId);
+  if (!error) loadAdminUsers(); else alert('Erro ao atualizar status: ' + error.message);
+}
 
-infoDialog.addEventListener('click', (e) => {
-  if (e.target === infoDialog) infoDialog.classList.remove('open');
-});
+if (adminPanelBtn) adminPanelBtn.addEventListener('click', () => { if (adminDialog) adminDialog.classList.add('open'); loadAdminUsers(); });
+if (closeAdminBtn) closeAdminBtn.addEventListener('click', () => { if (adminDialog) adminDialog.classList.remove('open'); });
+if (adminDialog) adminDialog.addEventListener('click', (e) => { if (e.target === adminDialog) adminDialog.classList.remove('open'); });
 
-import { supabase } from './supabase';
-
-const mainContent = document.getElementById('main-content') as HTMLElement;
-const pendingOverlay = document.getElementById('pending-overlay') as HTMLElement;
-const rejectedOverlay = document.getElementById('rejected-overlay') as HTMLElement;
-const adminPanelBtn = document.getElementById('admin-panel-btn') as HTMLButtonElement;
-const adminDialog = document.getElementById('admin-dialog') as HTMLDivElement;
-const closeAdminBtn = document.getElementById('close-admin-btn') as HTMLButtonElement;
-const adminUsersList = document.getElementById('admin-users-list') as HTMLDivElement;
+async function fetchItems() {
+  const { data, error } = await supabase.from('items').select('*').order('created_at', { ascending: false });
+  if (data && !error) {
+    items = data;
+    renderCards();
+  }
+}
 
 async function checkUserProfile(user: any) {
   if (!user) {
@@ -452,17 +406,13 @@ async function checkUserProfile(user: any) {
     if (adminPanelBtn) adminPanelBtn.style.display = 'none';
     return;
   }
-
   const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-
   if (!profile) {
-    // Se a tabela ainda não existir ou falhar, permite acesso temporário
     if (mainContent) mainContent.style.display = 'block';
     if (pendingOverlay) pendingOverlay.style.display = 'none';
     if (rejectedOverlay) rejectedOverlay.style.display = 'none';
     return;
   }
-
   if (profile.status === 'pending') {
     if (mainContent) mainContent.style.display = 'none';
     if (pendingOverlay) pendingOverlay.style.display = 'block';
@@ -477,21 +427,17 @@ async function checkUserProfile(user: any) {
     if (mainContent) mainContent.style.display = 'block';
     if (pendingOverlay) pendingOverlay.style.display = 'none';
     if (rejectedOverlay) rejectedOverlay.style.display = 'none';
+    if (profile.role === 'admin' && adminPanelBtn) adminPanelBtn.style.display = 'inline-flex';
+    else if (adminPanelBtn) adminPanelBtn.style.display = 'none';
     
-    if (profile.role === 'admin' && adminPanelBtn) {
-      adminPanelBtn.style.display = 'inline-flex';
-    } else if (adminPanelBtn) {
-      adminPanelBtn.style.display = 'none';
-    }
+    await fetchItems();
   }
 }
 
-// Sincronização do Usuário no Cabeçalho
 async function updateUserHeader() {
   const user = await getCurrentUser();
   if (user && user.email) {
-    userDisplay.textContent = user.email;
-    userDisplay.style.display = 'inline-block';
+    userDisplay.textContent = user.email; userDisplay.style.display = 'inline-block';
     if (googleHeaderBtn) googleHeaderBtn.style.display = 'none';
     if (sairBtn) sairBtn.style.display = 'inline-flex';
   } else {
@@ -504,8 +450,7 @@ async function updateUserHeader() {
 
 onAuthStateChange(async (user) => {
   if (user && user.email) {
-    userDisplay.textContent = user.email;
-    userDisplay.style.display = 'inline-block';
+    userDisplay.textContent = user.email; userDisplay.style.display = 'inline-block';
     if (googleHeaderBtn) googleHeaderBtn.style.display = 'none';
     if (sairBtn) sairBtn.style.display = 'inline-flex';
   } else {
@@ -516,21 +461,14 @@ onAuthStateChange(async (user) => {
   await checkUserProfile(user);
 });
 
-// Ação do Botão Google no Cabeçalho
 if (googleHeaderBtn) {
   googleHeaderBtn.addEventListener('click', async () => {
     try {
       const { error } = await loginWithGoogle();
-      if (error) {
-        alert('Para usar o login com Google, ative o provedor no painel do Supabase (Authentication > Providers > Google).');
-      }
-    } catch (err: unknown) {
-      console.error('Erro ao conectar com Google:', err);
-    }
+      if (error) alert('Ative o provedor no painel do Supabase.');
+    } catch (err: unknown) { console.error('Erro ao conectar com Google:', err); }
   });
 }
-
-// Logout
 if (sairBtn) {
   sairBtn.addEventListener('click', async () => {
     await logout();
@@ -538,95 +476,5 @@ if (sairBtn) {
   });
 }
 
-// Lógica do Painel Admin
-async function loadAdminUsers() {
-  if (!adminUsersList) return;
-  adminUsersList.innerHTML = '<p style="text-align: center; color: var(--muted-foreground);">Carregando usuários...</p>';
-  
-  const { data: users, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-  
-  if (error) {
-    adminUsersList.innerHTML = '<p style="color: red; text-align: center;">Erro ao carregar usuários.</p>';
-    return;
-  }
-  
-  if (!users || users.length === 0) {
-    adminUsersList.innerHTML = '<p style="text-align: center; color: var(--muted-foreground);">Nenhum usuário encontrado.</p>';
-    return;
-  }
-
-  adminUsersList.innerHTML = '';
-  users.forEach((u: any) => {
-    const userDiv = document.createElement('div');
-    userDiv.style.display = 'flex';
-    userDiv.style.justifyContent = 'space-between';
-    userDiv.style.alignItems = 'center';
-    userDiv.style.padding = '10px';
-    userDiv.style.border = '1px solid var(--border)';
-    userDiv.style.borderRadius = '8px';
-
-    const info = document.createElement('div');
-    info.innerHTML = `<strong>${u.email}</strong> <br/> <span style="font-size: 0.75rem; color: var(--muted-foreground);">Status: ${u.status} | Papel: ${u.role}</span>`;
-    
-    const actions = document.createElement('div');
-    actions.style.display = 'flex';
-    actions.style.gap = '8px';
-
-    if (u.status !== 'approved') {
-      const approveBtn = document.createElement('button');
-      approveBtn.textContent = 'Aprovar';
-      approveBtn.className = 'btn btn-primary';
-      approveBtn.style.padding = '4px 12px';
-      approveBtn.style.fontSize = '0.75rem';
-      approveBtn.onclick = () => updateUserStatus(u.id, 'approved');
-      actions.appendChild(approveBtn);
-    }
-
-    if (u.status !== 'rejected' && u.role !== 'admin') {
-      const rejectBtn = document.createElement('button');
-      rejectBtn.textContent = 'Negar';
-      rejectBtn.className = 'btn btn-danger';
-      rejectBtn.style.padding = '4px 12px';
-      rejectBtn.style.fontSize = '0.75rem';
-      rejectBtn.onclick = () => updateUserStatus(u.id, 'rejected');
-      actions.appendChild(rejectBtn);
-    }
-
-    userDiv.appendChild(info);
-    userDiv.appendChild(actions);
-    adminUsersList.appendChild(userDiv);
-  });
-}
-
-async function updateUserStatus(userId: string, newStatus: string) {
-  const { error } = await supabase.from('profiles').update({ status: newStatus }).eq('id', userId);
-  if (!error) {
-    loadAdminUsers();
-  } else {
-    alert('Erro ao atualizar status: ' + error.message);
-  }
-}
-
-if (adminPanelBtn) {
-  adminPanelBtn.addEventListener('click', () => {
-    if (adminDialog) adminDialog.classList.add('open');
-    loadAdminUsers();
-  });
-}
-
-if (closeAdminBtn) {
-  closeAdminBtn.addEventListener('click', () => {
-    if (adminDialog) adminDialog.classList.remove('open');
-  });
-}
-
-if (adminDialog) {
-  adminDialog.addEventListener('click', (e) => {
-    if (e.target === adminDialog) adminDialog.classList.remove('open');
-  });
-}
-
-// Inicialização
 updateUserHeader();
 setTab('falta');
-

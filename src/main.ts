@@ -20,8 +20,8 @@ import {
   ArrowRight
 } from 'lucide';
 
-// Verifica autenticação (desativada temporariamente: REQUIRE_AUTH = false)
-checkAuth(false);
+// Verifica autenticação usando a configuração global REQUIRE_AUTH
+checkAuth();
 
 // Estado da Aplicação
 let items: Item[] = getStoredItems();

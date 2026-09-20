@@ -4,7 +4,7 @@ import type { User, Session } from '@supabase/supabase-js';
 const DEMO_SESSION_KEY = 'para-ela-session';
 
 // Altere para true quando quiser que o login seja estritamente obrigatório para ver a lista
-export const REQUIRE_AUTH = false;
+export const REQUIRE_AUTH = true;
 
 export async function getSession(): Promise<Session | null> {
   if (!isSupabaseConfigured) {
